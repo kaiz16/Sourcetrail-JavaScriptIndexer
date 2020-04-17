@@ -1,0 +1,16 @@
+{
+  "name": "sourcetrail-javascript-indexer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/ast.js",
+  "dependencies": {
+    "acorn": "^7.1.1",
+    "acorn-bfs": "^0.2.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "kaiz16",
+  "license": "ISC"
+}

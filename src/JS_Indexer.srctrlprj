@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<config>
+    <source_groups>
+        <source_group_78efd997-84bf-4db6-9736-f5ddd702053c>
+            <custom_command>./JS_Indexer %{DATABASE_FILE_PATH} %{SOURCE_FILE_PATH} %{DATABASE_VERSION}</custom_command>
+            <name>Custom Command Source Group</name>
+            <source_extensions>
+                <source_extension>.js</source_extension>
+            </source_extensions>
+            <source_paths>
+                <source_path>/home/kaiz/Documents/SourcetrailDB/examples/JS_Indexer/data/file.js</source_path>
+            </source_paths>
+            <status>enabled</status>
+            <type>Custom Command Source Group</type>
+        </source_group_78efd997-84bf-4db6-9736-f5ddd702053c>
+    </source_groups>
+    <version>8</version>
+</config>

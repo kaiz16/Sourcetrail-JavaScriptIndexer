@@ -1,0 +1,14 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# dotenv environment variables file
+.env
+.env.test
+
+# lock
+package-lock.json
+
+# Temporary folders
+tmp/
+temp/
