@@ -1,8 +1,4 @@
 function foo(){
-    function blah(x){
-        return x + 1;
+    function bar(){
     }
-    return blah(2)
 }
-
-foo();

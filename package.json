@@ -4,12 +4,12 @@
   "description": "",
   "main": "src/ast.js",
   "dependencies": {
-    "acorn": "^7.1.1",
-    "acorn-bfs": "^0.2.0"
+    "flow-parser": "^0.123.0"
   },
   "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "parse": "node src/ast.js prettify > src/ast.json && node src/ast.js > src/raw.json"
   },
   "author": "kaiz16",
   "license": "ISC"
