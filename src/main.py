@@ -25,7 +25,7 @@ class AstVisitor:
 		return self.recordedLists.append(recordNode)
 
 	def getLocationofNode(self, node):
-		if node["id"]:
+		if "id" in node:
 			startLine = node["id"]["loc"]["start"]["line"]
 			startColumn = node["id"]["loc"]["start"]["column"]
 			endLine = node["id"]["loc"]["end"]["line"]
@@ -39,38 +39,29 @@ class AstVisitor:
 			return [startLine, startColumn, endLine, endColumn]
 
 	def recordGlobalWindowObject(self, node):
-		nameHierarchy = { "prefix": "", "name": node["type"], "postfix": ""}
-		string = '{ "name_delimiter": ".", "name_elements": [ ''{ "prefix": "%s", "name": "%s", "postfix": "%s" } ''] }'%(
-			nameHierarchy["prefix"], 
-			nameHierarchy["name"], 
-			nameHierarchy["postfix"]
-			)
-		symbolId = srctrl.recordSymbol(str(string))
+		nameHierarchy = [{ 'prefix': '', 'name': node["type"], 'postfix': ''}]
+		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
+		symbolId = srctrl.recordSymbol(json.dumps(string))
 		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
 		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_MODULE)
 		self.recordNode(node, symbolId, nameHierarchy)
 
 	def visitVariableDeclaration(self, node):
 		location = self.getLocationofNode(node)
-		parentScope = self.getParentScope(node)
+		parentNode = self.getParentScope(node)
 		# Do not record local variables for now
-		if parentScope["type"] != "Program":
+		if parentNode["type"] != "Program":
 			return
-
-		nameHierarchy = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
-		parentNameHierarchy = None
+		nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+		nameHierarchy = None
 		for item in self.recordedLists:
-			if parentScope == item["json"]:
-				parentNameHierarchy = item["name"]
-		string = '{ "name_delimiter": ".", "name_elements": [ ' '{ "prefix": "%s", "name": "%s", "postfix": "%s" }, ' '{ "prefix": "%s", "name": "%s", "postfix": "%s" } ''] }' %(
-			parentNameHierarchy["prefix"], 
-			parentNameHierarchy["name"], 
-			parentNameHierarchy["postfix"], 
-			nameHierarchy["prefix"], 
-			nameHierarchy["name"], 
-			nameHierarchy["postfix"]
-			)
-		symbolId = srctrl.recordSymbol(str(string))
+			if parentNode["type"] == item["type"] and parentNode == item["json"]:
+				nameHierarchy = item["name"].copy()
+				break
+
+		nameHierarchy.append(nodeName)
+		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
+		symbolId = srctrl.recordSymbol(json.dumps(string))
 		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
 		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_GLOBAL_VARIABLE) 
 		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
@@ -78,59 +69,53 @@ class AstVisitor:
 
 	def visitFunctionDeclaration(self, node):
 		location = self.getLocationofNode(node)
-		parentScope = self.getParentScope(node)
-		nameHierarchy = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
-		parentSymbolId = None
-		parentNameHierarchy = None
+		nodeName = { "prefix": "function", "name": node["id"]["name"], "postfix": ""}
+		nameHierarchy = []
+		parentNode = self.getParentScope(node)
+		# if parentNode["type"] != "Program":
+		# 	print(parentNode["id"]["name"])
 		for item in self.recordedLists:
-			if parentScope == item["json"]:
-				parentSymbolId = item["id"]
-				parentNameHierarchy = item["name"]
-		string = None
-		if parentScope["type"] != "Program":
-			string = '{ "name_delimiter": ".", "name_elements": [ ' '{ "prefix": "%s", "name": "%s", "postfix": "%s" }, ' '{ "prefix": "%s", "name": "%s", "postfix": "%s" } ''] }' %(
-				parentNameHierarchy["prefix"], 
-				parentNameHierarchy["name"], 
-				parentNameHierarchy["postfix"], 
-				nameHierarchy["prefix"], 
-				nameHierarchy["name"], 
-				nameHierarchy["postfix"]
-				)
-		else:
-			string = '{ "name_delimiter": ".", "name_elements": [ ' '{ "prefix": "%s", "name": "%s", "postfix": "%s" } ''] }' %(
-				nameHierarchy["prefix"], 
-				nameHierarchy["name"], 
-				nameHierarchy["postfix"]
-				)
-		# print(parentSymbolId.name)
-		symbolId = srctrl.recordSymbol(str(string))
+			if parentNode["type"] == item["type"] and parentNode == item["json"]:
+				nameHierarchy = item["name"].copy()
+				break
+		
+		nameHierarchy.append(nodeName)
+		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
+		symbolId = srctrl.recordSymbol(json.dumps(string))
 		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
 		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_FUNCTION)
 		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
 		self.recordNode(node, symbolId, nameHierarchy)
 
-	def getParentofNode(self, targetNode, ast=None, parentNode=None): 
-		ast = ast == None and self.parsedAst or ast
+	def getParentofNode(self, targetNode, ast=None, stacks=None):
+		if not ast:
+			ast = self.parsedAst
+			stacks = []
+
 		if ast["type"] == targetNode["type"] and ast["loc"] == targetNode["loc"]:
-			return parentNode
+				return True
 		else:
-			parentNode = ast
 			for key in ast.keys():
 				if (key == "loc" or key == "range"):
 					continue
 				if type(ast[key]) == dict: 
-					return self.getParentofNode(targetNode, ast[key], parentNode)
+					if self.getParentofNode(targetNode, ast[key], stacks):
+						stacks.append(ast)
+						return stacks
 				elif type(ast[key]) == list: # Array
 					for item in ast[key]:
-						return self.getParentofNode(targetNode, item, parentNode)
-		return parentNode
+						if self.getParentofNode(targetNode, item, stacks):
+							stacks.append(ast)
+							return stacks
+			return False
 		
-	def getParentScope(self, targetNode):
-		parent = self.getParentofNode(targetNode)
-		if parent["type"] == "Program" or parent["type"] == "FunctionDeclaration" or parent["type"] == "ClassDeclaration":
-			return parent
-		else:
-			return self.getParentScope(parent)
+	def getParentScope(self, node):
+		trails = self.getParentofNode(node)
+		for trail in trails:
+			if trail["type"] == "Program" or trail["type"] == "FunctionDeclaration" or trail["type"] == "ClassDeclaration":
+				parentNode = trail
+				break
+		return parentNode
 
 	def traverseNode(self, node=None):
 		node = node == None and self.parsedAst or node
