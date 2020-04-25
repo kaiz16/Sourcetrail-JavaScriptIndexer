@@ -8,8 +8,7 @@
   },
   "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "parse": "node src/ast.js prettify > src/ast.json && node src/ast.js > src/raw.json"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "kaiz16",
   "license": "ISC"

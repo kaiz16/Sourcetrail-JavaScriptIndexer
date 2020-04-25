@@ -12,3 +12,6 @@ package-lock.json
 # Temporary folders
 tmp/
 temp/
+test.sh
+src/ast.json
+src/raw.json
