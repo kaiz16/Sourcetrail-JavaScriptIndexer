@@ -8,6 +8,7 @@ class AstVisitor:
 	parsedAst = None
 	fileId = None
 	recordedLists = []
+	callNodes = []
 	def __init__(self, _sourceFile, _ast):
 		self.parsedAst = _ast
 		self.sourceFile = _sourceFile
@@ -22,6 +23,7 @@ class AstVisitor:
 		recordNode["id"] = id
 		recordNode["name"] = nameHierarchy
 		recordNode["json"] = node
+	#	print(recordNode)
 		return self.recordedLists.append(recordNode)
 
 	def getLocationofNode(self, node):
@@ -87,6 +89,31 @@ class AstVisitor:
 		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
 		self.recordNode(node, symbolId, nameHierarchy)
 
+	def visitCallExpression(self, node):
+		if not "name" in node["callee"]:
+			return 
+		location = self.getLocationofNode(node["callee"])
+		referencedSymbolId = None
+		for item in self.recordedLists:
+			if item["name"][(len(item["name"]) - 1)]["name"] == node["callee"]["name"]:
+				referencedSymbolId = item["id"]
+				break
+
+		if not referencedSymbolId:
+			return
+		contextSymbolId = None
+		parentNode = self.getParentScope(node)
+		for item in self.recordedLists:
+			if parentNode["type"] == item["type"] and parentNode == item["json"]:
+				contextSymbolId = item["id"]
+				break
+		referenceId = srctrl.recordReference(
+						contextSymbolId,
+						referencedSymbolId, 
+						srctrl.REFERENCE_CALL
+					)
+		srctrl.recordReferenceLocation(referenceId, self.fileId, location[0], location[1] + 1, location[2], location[3])
+
 	def getParentofNode(self, targetNode, ast=None, stacks=None):
 		if not ast:
 			ast = self.parsedAst
@@ -126,6 +153,8 @@ class AstVisitor:
 		elif node["type"] == "VariableDeclaration":
 			for var in node["declarations"]:
 				self.visitVariableDeclaration(var)
+		elif node["type"] == "CallExpression":
+				self.callNodes.append(node)
 
 		for key in node.keys():
 			if (key == "loc" or key == "range"):
@@ -135,7 +164,10 @@ class AstVisitor:
 			elif type(node[key]) == list: # Array
 					for item in node[key]:
 						self.traverseNode(item)
-
+					
+	def solveCallExpressions(self):	
+		for call in self.callNodes:
+			self.visitCallExpression(call)
 
 def main():
 	parser = argparse.ArgumentParser(description="SourcetrailDB JavaScript Indexer")
@@ -174,6 +206,7 @@ def main():
 	parsedAst = json.loads(ast)
 	astVisitor = AstVisitor(sourceFilePath, parsedAst)
 	astVisitor.traverseNode()
+	astVisitor.solveCallExpressions()
 	srctrl.commitTransaction()
 
 	if len(srctrl.getLastError()) > 0:
