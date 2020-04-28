@@ -2,6 +2,7 @@ import argparse
 import os
 import sourcetraildb as srctrl
 import json
+import jedi
 
 class AstVisitor:
 	sourceFile = None
@@ -16,103 +17,160 @@ class AstVisitor:
 		if not self.fileId:
 			print("ERROR: " + srctrl.getLastError())
 		srctrl.recordFileLanguage(self.fileId, "js")
+		self.recordNode(self.fileId, None, None, True)
 
-	def recordNode(self, node, id, nameHierarchy):
+	def recordNode(self, id, nameHierarchy, location, scope = False, referencedNodeId = None):
 		recordNode = {}
-		recordNode["type"] = node["type"]
 		recordNode["id"] = id
-		recordNode["name"] = nameHierarchy
-		recordNode["json"] = node
-	#	print(recordNode)
+		recordNode["nameHierarchy"] = nameHierarchy
+		recordNode["location"] = location
+		recordNode["scope"] = scope
+		recordNode["referencedNodeId"] = referencedNodeId
 		return self.recordedLists.append(recordNode)
 
 	def getLocationofNode(self, node):
-		if "id" in node:
-			startLine = node["id"]["loc"]["start"]["line"]
-			startColumn = node["id"]["loc"]["start"]["column"]
-			endLine = node["id"]["loc"]["end"]["line"]
-			endColumn = node["id"]["loc"]["end"]["column"]
-			return [startLine, startColumn, endLine, endColumn]
-		else:
-			startLine = node["loc"]["start"]["line"]
-			startColumn = node["loc"]["start"]["column"]
-			endLine = node["loc"]["end"]["line"]
-			endColumn = node["loc"]["end"]["column"]
-			return [startLine, startColumn, endLine, endColumn]
-
-	def recordGlobalWindowObject(self, node):
-		nameHierarchy = [{ 'prefix': '', 'name': node["type"], 'postfix': ''}]
-		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
-		symbolId = srctrl.recordSymbol(json.dumps(string))
-		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
-		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_MODULE)
-		self.recordNode(node, symbolId, nameHierarchy)
-
-	def visitVariableDeclaration(self, node):
-		location = self.getLocationofNode(node)
-		parentNode = self.getParentScope(node)
-		# Do not record local variables for now
-		if parentNode["type"] != "Program":
-			return
-		nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
-		nameHierarchy = None
-		for item in self.recordedLists:
-			if parentNode["type"] == item["type"] and parentNode == item["json"]:
-				nameHierarchy = item["name"].copy()
-				break
-
-		nameHierarchy.append(nodeName)
-		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
-		symbolId = srctrl.recordSymbol(json.dumps(string))
-		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
-		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_GLOBAL_VARIABLE) 
-		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
-		self.recordNode(node, symbolId, nameHierarchy)
+		startLine = node["loc"]["start"]["line"]
+		startColumn = node["loc"]["start"]["column"]
+		endLine = node["loc"]["end"]["line"]
+		endColumn = node["loc"]["end"]["column"]
+		return [startLine, startColumn, endLine, endColumn]
 
 	def visitFunctionDeclaration(self, node):
-		location = self.getLocationofNode(node)
-		nodeName = { "prefix": "function", "name": node["id"]["name"], "postfix": ""}
-		nameHierarchy = []
-		parentNode = self.getParentScope(node)
-		# if parentNode["type"] != "Program":
-		# 	print(parentNode["id"]["name"])
-		for item in self.recordedLists:
-			if parentNode["type"] == item["type"] and parentNode == item["json"]:
-				nameHierarchy = item["name"].copy()
-				break
-		
-		nameHierarchy.append(nodeName)
+		if "id" in node:
+			nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+			location = self.getLocationofNode(node["id"])
+		else:
+			nodeName = { "prefix": "", "name": node["key"]["name"], "postfix": ""}
+			location = self.getLocationofNode(node["key"])
+		scopeLocation = self.getLocationofNode(node)
+		#nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+		parentName = self.getParentName(node)["nameHierarchy"]
+		if parentName == None:
+			nameHierarchy = [nodeName]
+		else:
+			nameHierarchy = [name for name in parentName]
+			nameHierarchy.append(nodeName)
 		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
 		symbolId = srctrl.recordSymbol(json.dumps(string))
 		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
 		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_FUNCTION)
 		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
-		self.recordNode(node, symbolId, nameHierarchy)
+		srctrl.recordSymbolScopeLocation(symbolId, self.fileId, scopeLocation[0], scopeLocation[1] + 1, scopeLocation[2], scopeLocation[3])
+		self.recordNode(symbolId, nameHierarchy, scopeLocation, True)
 
-	def visitCallExpression(self, node):
-		if not "name" in node["callee"]:
-			return 
-		location = self.getLocationofNode(node["callee"])
+	def visitClassDeclaration(self, node):
+		location = self.getLocationofNode(node["id"])
+		scopeLocation = self.getLocationofNode(node)
+		nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+		parentName = self.getParentName(node)["nameHierarchy"]
+		if parentName == None:
+			nameHierarchy = [nodeName]
+		else:
+			nameHierarchy = [name for name in parentName]
+			nameHierarchy.append(nodeName)
+		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
+		symbolId = srctrl.recordSymbol(json.dumps(string))
+		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
+		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_CLASS)
+		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
+		srctrl.recordSymbolScopeLocation(symbolId, self.fileId, scopeLocation[0], scopeLocation[1] + 1, scopeLocation[2], scopeLocation[3])
+		self.recordNode(symbolId, nameHierarchy, scopeLocation, True)
+
+	def visitVariableDeclaration(self, node):
+		if node["init"]["type"] == "FunctionExpression":
+			self.visitFunctionDeclaration(node)
+			return
+		if node["init"]["type"] == "NewExpression":
+			self.visitNewExpression(node)
+			return
+		location = self.getLocationofNode(node["id"])
+		nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+		
+		parentName = self.getParentName(node)["nameHierarchy"]
+		if parentName:
+			return
+		string = { "name_delimiter": ".", "name_elements": [nodeName] }
+		symbolId = srctrl.recordSymbol(json.dumps(string))
+		srctrl.recordSymbolDefinitionKind(symbolId, srctrl.DEFINITION_EXPLICIT)
+		srctrl.recordSymbolKind(symbolId, srctrl.SYMBOL_GLOBAL_VARIABLE)
+		srctrl.recordSymbolLocation(symbolId, self.fileId, location[0], location[1] + 1, location[2], location[3])
+		#self.recordNode(symbolId, nameHierarchy, scopeLocation, False)
+
+	def visitNewExpression(self, node):
+		loc = node["id"]["loc"]
+		node["init"]["callee"]["loc"] = loc
+
+		location = self.getLocationofNode(node["id"])
+		nodeName = { "prefix": "", "name": node["id"]["name"], "postfix": ""}
+		
+		parentName = self.getParentName(node)["nameHierarchy"]
+		if parentName == None:
+			nameHierarchy = [nodeName]
+		else:
+			nameHierarchy = [name for name in parentName]
+			nameHierarchy.append(nodeName)
+		string = { "name_delimiter": ".", "name_elements": [name for name in nameHierarchy] }
+		v = self.visitCallExpression(node["init"])
+		v["nameHierarchy"] = node["id"]["name"]
+		
+
+	def visitMemberExpression(self, node):
+		if not "name" in node["object"]:
+			return
+		objName = node["object"]["name"]
+		location = self.getLocationofNode(node["object"])
 		referencedSymbolId = None
 		for item in self.recordedLists:
-			if item["name"][(len(item["name"]) - 1)]["name"] == node["callee"]["name"]:
-				referencedSymbolId = item["id"]
+			name = item["nameHierarchy"]
+			if not name:
+				continue
+			if item["nameHierarchy"] == objName:
+				referencedSymbolId = item["referencedNodeId"]
 				break
-
-		if not referencedSymbolId:
-			return
-		contextSymbolId = None
-		parentNode = self.getParentScope(node)
-		for item in self.recordedLists:
-			if parentNode["type"] == item["type"] and parentNode == item["json"]:
-				contextSymbolId = item["id"]
-				break
+		contextSymbolId = self.getParentName(node)["id"]
 		referenceId = srctrl.recordReference(
 						contextSymbolId,
 						referencedSymbolId, 
 						srctrl.REFERENCE_CALL
 					)
 		srctrl.recordReferenceLocation(referenceId, self.fileId, location[0], location[1] + 1, location[2], location[3])
+		return self.visitCallExpression(node["property"])
+
+	def visitCallExpression(self, node):
+		
+		if "callee" in node:
+			if not "name" in node["callee"]:
+				return 
+			nodeName = node["callee"]["name"]
+			location = self.getLocationofNode(node["callee"])
+		else:
+			if not "name" in node:
+				return 
+			nodeName = node["name"]
+			location = self.getLocationofNode(node)
+		referencedSymbolId = None
+		for item in self.recordedLists:
+			name = item["nameHierarchy"]
+			if not name:
+				continue
+			if type(name) == list:
+				if name[len(name) - 1]["name"] == nodeName:
+					referencedSymbolId = item["id"]
+					break
+
+		if not referencedSymbolId:
+			return
+
+		contextSymbolId = self.getParentName(node)["id"]
+
+		referenceId = srctrl.recordReference(
+						contextSymbolId,
+						referencedSymbolId, 
+						srctrl.REFERENCE_CALL
+					)
+		srctrl.recordReferenceLocation(referenceId, self.fileId, location[0], location[1] + 1, location[2], location[3])
+		self.recordNode(referenceId, nodeName, location, False, referencedSymbolId)
+		return self.recordedLists[len(self.recordedLists) - 1]
 
 	def getParentofNode(self, targetNode, ast=None, stacks=None):
 		if not ast:
@@ -136,26 +194,31 @@ class AstVisitor:
 							return stacks
 			return False
 		
-	def getParentScope(self, node):
-		trails = self.getParentofNode(node)
-		for trail in trails:
-			if trail["type"] == "Program" or trail["type"] == "FunctionDeclaration" or trail["type"] == "ClassDeclaration":
-				parentNode = trail
-				break
-		return parentNode
+	def getParentName(self, node):
+		parents = self.getParentofNode(node)
+		for parent in parents:
+			if parent["type"] == "Program":
+				return self.recordedLists[0]
+			else:
+				loc = self.getLocationofNode(parent)
+				for item in self.recordedLists:
+					if item["location"] == loc and item["scope"]:
+						return item
+				
 
 	def traverseNode(self, node=None):
 		node = node == None and self.parsedAst or node
-		if node["type"] == "Program":
-			self.recordGlobalWindowObject(node)
-		elif node["type"] == "FunctionDeclaration":
+		if node["type"] == "FunctionDeclaration" or node["type"] == "MethodDefinition" :
 			self.visitFunctionDeclaration(node)
+		elif node["type"] == "ClassDeclaration":
+			self.visitClassDeclaration(node)
 		elif node["type"] == "VariableDeclaration":
 			for var in node["declarations"]:
 				self.visitVariableDeclaration(var)
+		elif node["type"] == "MemberExpression":
+			self.visitMemberExpression(node)
 		elif node["type"] == "CallExpression":
-				self.callNodes.append(node)
-
+			self.callNodes.append(node)
 		for key in node.keys():
 			if (key == "loc" or key == "range"):
 				continue

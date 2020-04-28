@@ -1,19 +1,30 @@
+class Rectangle{
+    constructor(height, weight){
+        this.height = height;
+        this.weight = weight;
+    }
+
+    getArea(){
+        return calArea();
+    }
+
+    calArea(){
+        return this.height * this.weight;
+    }
+}
+
+const sq = new Rectangle();
+sq.getArea()
+
 function foo(){
-   return bar()
+    return bar()
 }
 
 function bar(){
-   return printHello()
+    return printHello()
 }
 
-function printHello(){
-    console.log("hello")
+var printHello = function thatPrintsHello(){
+    alert("Hello")
 }
 foo()
-
-function findFactorial(number){
-    if (number == 0) return 1
-    return number * findFactorial(number - 1)
-}
-
-findFactorial(1)
