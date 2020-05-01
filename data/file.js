@@ -13,7 +13,7 @@ class Rectangle{
     }
 }
 
-const sq = new Rectangle();
+const sq = new Rectangle(5, 6);
 sq.getArea()
 
 function foo(){
