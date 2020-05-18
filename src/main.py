@@ -2,7 +2,6 @@ import argparse
 import os
 import sourcetraildb as srctrl
 import json
-import jedi
 
 class AstVisitor:
 	sourceFile = None
