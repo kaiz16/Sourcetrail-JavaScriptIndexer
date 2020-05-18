@@ -15,3 +15,12 @@ temp/
 test.sh
 src/ast.json
 src/raw.json
+
+# Python Bindings
+src/__pycache__/
+src/_sourcetraildb.so
+src/sourcetraildb.py
+python_js_*
+
+# ast
+raw.json
